@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+resources/
+*.egg-info
+
+# tesseract
+tesseract_bin
+
+# test_files
+test_files
+
+# profiles setting file
+profiles.json
+
+# Virtual environments
+.venv
+
+# Build Spec
+*.spec

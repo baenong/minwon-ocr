@@ -1,0 +1,6 @@
+PySide6
+pytesseract
+opencv-python
+pandas
+openpyxl
+pymupdf
