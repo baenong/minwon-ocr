@@ -4,7 +4,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
-    QProgressBar,
     QFileDialog,
     QMessageBox,
     QGroupBox,
@@ -25,6 +24,9 @@ from ui.components import ActionButton, LogView, SmoothProgressBar
 class OCRRunner(QWidget):
     ocr_finished_with_data = Signal(dict)
 
+    SUPPORTED_EXTENSIONS = (".png", ".jpg", "jpeg", ".pdf")
+    FILE_FILTER = "Images (*.png *.jpg *.jpeg *.pdf)"
+
     def __init__(self):
         super().__init__()
         self.processor = None
@@ -33,29 +35,48 @@ class OCRRunner(QWidget):
         self.init_ui()
 
     def init_ui(self):
-        # 메인 레이아웃 (여백 최소화)
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 좌우 분할을 위한 Splitter 생성
         splitter = QSplitter(Qt.Horizontal)
 
-        # ==========================================
         # [좌측 패널] 서식 매칭 설정 + 작업 대상 선택
-        # ==========================================
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        # --- 1. 서식 매칭 설정 (상단 배치) ---
-        profile_group = QGroupBox("서식 매칭 방법")
-        profile_layout = QVBoxLayout()
+        left_layout.addWidget(self._create_profile_group())
+        left_layout.addWidget(self._create_input_group())
 
-        # 라디오 버튼 영역
+        # [우측 패널] 실행/중지 + 처리 로그
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+
+        right_layout.addWidget(self._create_control_group())
+        right_layout.addWidget(self._create_log_group())
+
+        # [패널 조립]
+        splitter.addWidget(left_panel)
+        splitter.addWidget(right_panel)
+        splitter.setStretchFactor(0, 4)
+        splitter.setStretchFactor(1, 6)
+
+        main_layout.addWidget(splitter)
+
+        # Shortcut
+        self.shortcut_del_file = QShortcut(QKeySequence("Delete"), self)
+        self.shortcut_del_file.activated.connect(self.delete_selected_files)
+
+    def _create_profile_group(self):
+        group = QGroupBox("서식 매칭 방법")
+        layout = QVBoxLayout()
+
+        # 라디오 버튼
         radio_layout = QHBoxLayout()
         self.radio_auto = QRadioButton("자동 (키워드)")
         self.radio_manual = QRadioButton("수동 (강제지정)")
-        self.radio_manual.setChecked(True)  # 기본값 수동
+        self.radio_manual.setChecked(True)
 
         self.mode_group = QButtonGroup()
         self.mode_group.addButton(self.radio_auto)
@@ -66,26 +87,24 @@ class OCRRunner(QWidget):
         radio_layout.addWidget(self.radio_manual)
         radio_layout.addStretch()
 
-        profile_layout.addLayout(radio_layout)
+        layout.addLayout(radio_layout)
 
-        # 콤보박스 (수동 선택 시 활성화)
+        # 콤보박스
         self.combo_profile = QComboBox()
-        self.combo_profile.setEnabled(True)
-        self.refresh_profile_list()  # 목록 로드
-        profile_layout.addWidget(self.combo_profile)
+        self.refresh_profile_list()
+        layout.addWidget(self.combo_profile)
 
-        self.lbl_guide = QLabel("※ 목록에 서식이 없다면 서식 설정 먼저 진행해주세요")
-        self.lbl_guide.setStyleSheet("margin-top: 5px; color: #ff7f00;")
-        profile_layout.addWidget(self.lbl_guide)
+        lbl_guide = QLabel("※ 목록에 서식이 없다면 서식 설정 먼저 진행해주세요")
+        lbl_guide.setStyleSheet("margin-top: 5px; color: #ff7f00;")
+        layout.addWidget(lbl_guide)
 
-        profile_group.setLayout(profile_layout)
-        left_layout.addWidget(profile_group)
+        group.setLayout(layout)
+        return group
 
-        # --- 2. 작업 대상 선택 (하단 배치 - 확장됨) ---
-        input_group = QGroupBox("대상 파일")
-        input_layout = QVBoxLayout()
+    def _create_input_group(self):
+        group = QGroupBox("대상 파일")
+        layout = QVBoxLayout()
 
-        # 파일 추가 버튼들
         btn_layout = QHBoxLayout()
         self.btn_add_files = ActionButton("파일 추가", self.add_files)
         self.btn_add_folder = ActionButton("폴더 추가", self.add_folder)
@@ -94,74 +113,48 @@ class OCRRunner(QWidget):
         btn_layout.addWidget(self.btn_add_files)
         btn_layout.addWidget(self.btn_add_folder)
         btn_layout.addWidget(self.btn_clear)
-        input_layout.addLayout(btn_layout)
+        layout.addLayout(btn_layout)
 
-        # 파일 리스트 (공간을 많이 차지하도록)
         self.file_list_widget = QListWidget()
         self.file_list_widget.setSelectionMode(QListWidget.ExtendedSelection)
-        input_layout.addWidget(self.file_list_widget)
+        layout.addWidget(self.file_list_widget)
 
-        input_group.setLayout(input_layout)
-        left_layout.addWidget(input_group)
+        group.setLayout(layout)
+        return group
 
-        # ==========================================
-        # [우측 패널] 실행/중지 + 처리 로그
-        # ==========================================
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-
-        # --- 3. 실행 제어 (상단) ---
-        control_group = QGroupBox("실행 제어")
-        control_layout = QHBoxLayout()
+    def _create_control_group(self):
+        group = QGroupBox("실행 제어")
+        layout = QHBoxLayout()
 
         self.btn_start = ActionButton(
             "▶ 추출 시작", self.start_processing, preset="blue"
         )
-
         self.btn_stop = ActionButton(
-            "■ 작업 중지",
-            self.stop_processing,
-            preset="red",
-            enabled=False,
+            "■ 작업 중지", self.stop_processing, preset="red", enabled=False
         )
 
-        control_layout.addWidget(self.btn_start)
-        control_layout.addWidget(self.btn_stop)
-        control_group.setLayout(control_layout)
-        right_layout.addWidget(control_group)
+        layout.addWidget(self.btn_start)
+        layout.addWidget(self.btn_stop)
+        group.setLayout(layout)
+        return group
 
-        # --- 4. 처리 로그 (하단 - 확장됨) ---
-        log_group = QGroupBox("처리 로그 및 결과")
-        log_layout = QVBoxLayout()
+    def _create_log_group(self):
+        group = QGroupBox("처리 로그 및 결과")
+        layout = QVBoxLayout()
 
         self.progress_bar = SmoothProgressBar()
         self.log_view = LogView()
 
-        log_layout.addWidget(QLabel("진행률:"))
-        log_layout.addWidget(self.progress_bar)
-        log_layout.addWidget(QLabel("상세 로그:"))
-        log_layout.addWidget(self.log_view)
-        log_group.setLayout(log_layout)
-        right_layout.addWidget(log_group)
+        layout.addWidget(QLabel("진행률:"))
+        layout.addWidget(self.progress_bar)
+        layout.addWidget(QLabel("상세 로그:"))
+        layout.addWidget(self.log_view)
 
-        # ==========================================
-        # [패널 조립]
-        # ==========================================
-        splitter.addWidget(left_panel)
-        splitter.addWidget(right_panel)
+        group.setLayout(layout)
+        return group
 
-        # 초기 비율 설정 (좌:우 = 4:6 정도)
-        splitter.setStretchFactor(0, 4)
-        splitter.setStretchFactor(1, 6)
+    # Logic
 
-        main_layout.addWidget(splitter)
-
-        # Shortcut
-        self.shortcut_del_file = QShortcut(QKeySequence("Delete"), self)
-        self.shortcut_del_file.activated.connect(self.delete_selected_files)
-
-    # --- 기존 기능 메서드들 (변경 없음) ---
     def showEvent(self, event):
         super().showEvent(event)
         self.refresh_profile_list()
@@ -169,29 +162,40 @@ class OCRRunner(QWidget):
     def refresh_profile_list(self):
         current_text = self.combo_profile.currentText()
         self.combo_profile.clear()
+
         self.profile_manager.load_profiles()
         names = self.profile_manager.get_all_profile_names()
+
         self.combo_profile.addItems(names)
         if current_text in names:
             self.combo_profile.setCurrentText(current_text)
 
     def toggle_profile_combo(self):
-        is_manual = self.radio_manual.isChecked()
-        self.combo_profile.setEnabled(is_manual)
+        self.combo_profile.setEnabled(self.radio_manual.isChecked())
+
+    def _add_file_item(self, file_path):
+        if file_path not in self.target_files:
+            self.target_files.append(file_path)
+
+            display_text = os.path.basename(file_path)
+
+            item = QListWidgetItem(display_text)
+            item.setData(Qt.UserRole, file_path)
+            self.file_list_widget.addItem(item)
+            return True
+        return False
 
     def add_files(self):
         files, _ = QFileDialog.getOpenFileNames(
             self, "파일 선택", "", "Images (*.png *.jpg *.jpeg *.pdf)"
         )
         if files:
+            count = 0
             for f in files:
-                if f not in self.target_files:
-                    self.target_files.append(f)
-                    item = QListWidgetItem(os.path.basename(f))
-                    item.setData(Qt.UserRole, f)
-                    self.file_list_widget.addItem(item)
-
-            self.update_log_count()
+                if self._add_file_item(f):
+                    count += 1
+            if count > 0:
+                self.update_log_count()
 
     def add_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "폴더 선택")
@@ -199,35 +203,35 @@ class OCRRunner(QWidget):
             cnt = 0
             for root, dirs, files in os.walk(folder):
                 for f in files:
-                    if f.lower().endswith((".png", ".jpg", ".jpeg", ".pdf")):
+                    if f.lower().endswith(self.SUPPORTED_EXTENSIONS):
                         full_path = os.path.join(root, f)
-
-                        if full_path not in self.target_files:
-                            self.target_files.append(full_path)
-                            item = QListWidgetItem(f"[폴더] {f}")
-                            item.setData(Qt.UserRole, full_path)
-                            self.file_list_widget.addItem(item)
+                        if self._add_file_item(full_path):
                             cnt += 1
 
-            self.log_view.append(f"📂 폴더에서 {cnt}개 파일 추가됨.")
+            self.log_view.append_log(f"📂 폴더에서 {cnt}개 파일 추가됨.")
             self.update_log_count()
 
     def delete_selected_files(self):
-        if self.file_list_widget.hasFocus():
-            items = self.file_list_widget.selectedItems()
-            if not items:
-                return
+        if not self.file_list_widget.hasFocus():
+            return
 
-            for item in items:
-                full_path = item.data(Qt.UserRole)
+        items = self.file_list_widget.selectedItems()
+        if not items:
+            return
 
-                if full_path in self.target_files:
-                    self.target_files.remove(full_path)
+        deleted_count = 0
+        for item in items:
+            full_path = item.data(Qt.UserRole)
 
-                row = self.file_list_widget.row(item)
-                self.file_list_widget.takeItem(row)
+            if full_path in self.target_files:
+                self.target_files.remove(full_path)
 
-            self.log_view.append_log("선택한 파일이 제외되었습니다.")
+            row = self.file_list_widget.row(item)
+            self.file_list_widget.takeItem(row)
+            deleted_count += 1
+
+        if deleted_count > 0:
+            self.log_view.append_log(f"{deleted_count}개 파일이 제외되었습니다.")
             self.update_log_count()
 
     def clear_files(self):
@@ -238,6 +242,19 @@ class OCRRunner(QWidget):
 
     def update_log_count(self):
         self.log_view.append(f"현재 대기 중인 파일: {len(self.target_files)}개")
+
+    # OCR Processing
+
+    def _set_processing_state(self, is_running):
+        self.btn_start.setEnabled(not is_running)
+        self.btn_stop.setEnabled(is_running)
+        self.btn_add_files.setEnabled(not is_running)
+        self.btn_add_folder.setEnabled(not is_running)
+        self.btn_clear.setEnabled(not is_running)
+
+        self.combo_profile.setEnabled(not is_running and self.radio_manual.isChecked())
+        self.radio_auto.setEnabled(not is_running)
+        self.radio_manual.setEnabled(not is_running)
 
     def start_processing(self):
         if not self.target_files:
@@ -253,14 +270,11 @@ class OCRRunner(QWidget):
                 QMessageBox.warning(self, "알림", "선택된 프로파일이 없습니다.")
                 return
 
-        self.btn_start.setEnabled(False)
-        self.btn_stop.setEnabled(True)
-        self.btn_add_files.setEnabled(False)
-        self.btn_add_folder.setEnabled(False)
-        self.btn_clear.setEnabled(False)
+        self._set_processing_state(True)
 
         # self.log_view.clear()
         self.progress_bar.setValue(0)
+        self.log_view.append_log("--- 작업 시작 ---")
 
         self.processor = BatchProcessor(self.target_files, forced_profile)
         self.processor.log_signal.connect(self.log_view.append_log)
@@ -274,9 +288,6 @@ class OCRRunner(QWidget):
             self.processor.stop()
             self.log_view.append_log("🛑 중단 요청됨...")
 
-    # def append_log(self, text):
-    #     self.log_view.append_log(text)
-
     def update_progress(self, val):
         self.progress_bar.setValueSmooth(val)
 
@@ -284,11 +295,7 @@ class OCRRunner(QWidget):
         self.ocr_finished_with_data.emit(results)
 
     def on_finished(self, msg):
-        self.btn_start.setEnabled(True)
-        self.btn_stop.setEnabled(False)
-        self.btn_add_files.setEnabled(True)
-        self.btn_add_folder.setEnabled(True)
-        self.btn_clear.setEnabled(True)
+        self._set_processing_state(False)
 
         self.log_view.append_log(f"--- {msg} ---")
         QMessageBox.information(self, "완료", msg)
