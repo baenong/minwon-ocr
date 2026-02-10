@@ -42,7 +42,7 @@ class VerificationViewer(QWidget):
 
         self.btn_open_folder = ActionButton("📂 엑셀 불러오기", self.load_excel_file)
         self.btn_save = ActionButton(
-            "💾 엑셀로 저장", self.save_data_to_file, preset="green"
+            "💾 엑셀파일 저장", self.save_data_to_file, preset="green"
         )
         self.lbl_guide = QLabel("OCR 실행결과나 기존 엑셀 파일을 검증합니다.")
         self.lbl_guide.setStyleSheet("margin-right: 5px; color: #ff7f00;")

@@ -7,40 +7,65 @@ from PySide6.QtCore import Qt, Signal
 class ROISelector(QGraphicsView):
     roi_added = Signal(float, float, float, float)
 
+    STYLE_CONFIG = {
+        "default_color": QColor(255, 0, 0),
+        "highlight_color": QColor(0, 0, 255),
+        "default_width": 2,
+        "highlight_width": 3,
+        "default_alpha": 50,
+        "highlight_alpha": 80,
+    }
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.scene = QGraphicsScene(self)
-        self.setScene(self.scene)
-
-        self.setRenderHint(QPainter.Antialiasing)
-        self.setRenderHint(QPainter.SmoothPixmapTransform)
-
-        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-
+        self.roi_items = []
         self.start_pos = None
         self.current_rect_item = None
         self.is_drawing = False
-
         self.pixmap_item = None
+        self._image_data_ref = None  # [중요] QImage 데이터 참조 유지용
 
-        # 2026. 2. 9. roi 개선
-        self.roi_items = []
-        self.default_pen = QPen(QColor(255, 0, 0), 2)
+        self._init_view()
+        self._init_scene()
+        self._init_styles()
+
+    def _init_view(self):
+        self.setRenderHint(QPainter.Antialiasing)
+        self.setRenderHint(QPainter.SmoothPixmapTransform)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.setViewportUpdateMode(QGraphicsView.FullViewportUpdate)
+
+    def _init_scene(self):
+        self.scene = QGraphicsScene(self)
+        self.setScene(self.scene)
+
+    def _init_styles(self):
+        cfg = self.STYLE_CONFIG
+
+        self.default_pen = QPen(cfg["default_color"], cfg["default_width"])
         self.default_pen.setCosmetic(True)
-        self.default_brush = QBrush(QColor(255, 0, 0, 50))
 
-        self.highlight_pen = QPen(QColor(0, 0, 255), 3)
+        self.default_brush = QBrush(cfg["default_color"])
+        color = self.default_brush.color()
+        color.setAlpha(cfg["default_alpha"])
+        self.default_brush.setColor(color)
+
+        self.highlight_pen = QPen(cfg["highlight_color"], cfg["highlight_width"])
         self.highlight_pen.setCosmetic(True)
-        self.highlight_brush = QBrush(QColor(0, 0, 255, 80))
+
+        self.highlight_brush = QBrush(cfg["highlight_color"])
+        color = self.highlight_brush.color()
+        color.setAlpha(cfg["highlight_alpha"])
+        self.highlight_brush.setColor(color)
 
     def set_image(self, cv_image, reset_view=True):
-        """이미지를 설정하고 기존 박스들을 모두 지웁니다."""
         self.scene.clear()
         self.current_rect_item = None
-
-        # 2026. 2. 9. roi 개선
         self.roi_items = []
+
+        if cv_image is None:
+            return
 
         if len(cv_image.shape) == 2:
             cv_image = cv2.cvtColor(cv_image, cv2.COLOR_GRAY2BGR)
@@ -49,13 +74,18 @@ class ROISelector(QGraphicsView):
         bytes_per_line = 3 * width
 
         rgb_image = cv2.cvtColor(cv_image, cv2.COLOR_BGR2RGB)
+        self._image_data_ref = rgb_image
+
         q_img = QImage(
-            rgb_image.data, width, height, bytes_per_line, QImage.Format_RGB888
+            self._image_data_ref.data,
+            width,
+            height,
+            bytes_per_line,
+            QImage.Format_RGB888,
         )
 
         pixmap = QPixmap.fromImage(q_img)
         self.pixmap_item = self.scene.addPixmap(pixmap)
-
         self.setSceneRect(0, 0, width, height)
 
         if reset_view:
@@ -64,10 +94,8 @@ class ROISelector(QGraphicsView):
     def add_roi_rect(self, x, y, w, h):
         rect_item = QGraphicsRectItem(x, y, w, h)
 
-        pen = QPen(QColor(255, 0, 0), 2)
-        pen.setCosmetic(True)
-        rect_item.setPen(pen)
-        rect_item.setBrush(QBrush(QColor(255, 0, 0, 50)))
+        rect_item.setPen(self.default_pen)
+        rect_item.setBrush(self.default_brush)
 
         self.scene.addItem(rect_item)
         self.roi_items.append(rect_item)
@@ -83,6 +111,8 @@ class ROISelector(QGraphicsView):
                 item.setBrush(self.default_brush)
                 item.setZValue(0)
 
+    # Event Handler
+
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton and self.pixmap_item:
             scene_pos = self.mapToScene(event.pos())
@@ -93,10 +123,8 @@ class ROISelector(QGraphicsView):
             self.is_drawing = True
             self.start_pos = scene_pos
             self.current_rect_item = QGraphicsRectItem()
-
             self.current_rect_item.setPen(self.default_pen)
             self.current_rect_item.setBrush(self.default_brush)
-
             self.scene.addItem(self.current_rect_item)
 
         super().mousePressEvent(event)
@@ -104,8 +132,8 @@ class ROISelector(QGraphicsView):
     def mouseMoveEvent(self, event):
         if self.is_drawing and self.current_rect_item:
             scene_pos = self.mapToScene(event.pos())
-
             img_rect = self.sceneRect()
+
             curr_x = min(max(scene_pos.x(), 0), img_rect.width())
             curr_y = min(max(scene_pos.y(), 0), img_rect.height())
 

@@ -572,7 +572,6 @@ class ProfileEditor(QWidget):
         self.log_view.append_log("------ 테스트 완료 ------")
 
     def open_keyword_dialog(self):
-        """키워드 설정 다이얼로그 열기"""
         item = self.profile_list_widget.currentItem()
         if not item:
             QMessageBox.warning(self, "알림", "설정할 서식을 먼저 선택해주세요.")
@@ -593,7 +592,7 @@ class ProfileEditor(QWidget):
                 ref_w, ref_h = data.get("ref_w"), data.get("ref_h")
 
             self.profile_manager.add_profile(
-                name, new_keywords, self.rois, ref_w, ref_h
+                name, new_keywords, self.rois, ref_w, ref_h, self.current_image_path
             )
             QMessageBox.information(self, "완료", "키워드가 설정되었습니다.")
 
