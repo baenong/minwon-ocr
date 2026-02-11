@@ -1,8 +1,23 @@
+from dataclasses import dataclass
+from typing import Final, Tuple
+
+
+@dataclass(frozen=True)
 class AppConfig:
-    APP_NAME = "Minwon OCR Automation Tool"
-    SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".pdf", ".bmp")
+    APP_NAME: Final[str] = "Minwon OCR Automation Tool"
 
-    _ext_str = " ".join([f"*{ext}" for ext in SUPPORTED_EXTENSIONS])
-    FILE_DIALOG_FILTER = f"Images ({_ext_str});;All Files (*)"
+    # ext
+    IMG_EXTS: Final[Tuple[str, ...]] = (".png", ".jpg", ".jpeg", ".pdf")
+    EXCEL_EXTS: Final[Tuple[str, ...]] = (".xlsx", ".xls")
+    JSON_EXTS: Final[Tuple[str, ...]] = (".json",)
 
-    EXCEL_FILTER = "Excel Files (*.xlsx)"
+    @staticmethod
+    def _make_filter(name: str, exts: Tuple[str, ...]):
+        # 예: (".png", ".jpg") -> "*.png *.jpg"
+        wildcards = " ".join([f"*{ext}" for ext in exts])
+        return f"{name} ({wildcards})"
+
+    FILTER_IMAGE: Final[str] = _make_filter.__func__("Images", IMG_EXTS)
+    FILTER_EXCEL: Final[str] = _make_filter.__func__("Excel Files", EXCEL_EXTS)
+    FILTER_JSON: Final[str] = _make_filter.__func__("JSON Files", JSON_EXTS)
+    FILTER_ALL: Final[str] = "All Files (*)"

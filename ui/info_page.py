@@ -1,5 +1,5 @@
-import os
 import sys
+from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -17,14 +17,15 @@ class InfoContent:
     @staticmethod
     def get_resource_path(file_name):
         if getattr(sys, "frozen", False):
-            base_path = sys._MEIPASS
+            base_path = Path(sys._MEIPASS)
         else:
-            base_path = os.path.abspath(".")
-        return os.path.join(base_path, "resources/imgs", file_name).replace("\\", "/")
+            base_path = Path(".").resolve()
+
+        full_path = base_path / "resources" / "imgs" / file_name
+        return full_path.as_posix()
 
     @staticmethod
     def get_sections():
-        """도움말 섹션 데이터 반환"""
         # 이미지 경로 미리 로드
         img_btn = InfoContent.get_resource_path("setting_menu_btn.png")
         img_menu01 = InfoContent.get_resource_path("setting_menu01.png")

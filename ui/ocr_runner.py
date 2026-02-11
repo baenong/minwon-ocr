@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
@@ -176,7 +176,7 @@ class OCRRunner(QWidget):
         if file_path not in self.target_files:
             self.target_files.append(file_path)
 
-            display_text = os.path.basename(file_path)
+            display_text = Path(file_path).name
 
             item = QListWidgetItem(display_text)
             item.setData(Qt.UserRole, file_path)
@@ -199,13 +199,15 @@ class OCRRunner(QWidget):
     def add_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "폴더 선택")
         if folder:
+            folder_path = Path(folder)
             cnt = 0
-            for root, dirs, files in os.walk(folder):
-                for f in files:
-                    if f.lower().endswith(AppConfig.IMG_EXTS):
-                        full_path = os.path.join(root, f)
-                        if self._add_file_item(full_path):
-                            cnt += 1
+            for file_path in folder_path.rglob("*"):
+                if (
+                    file_path.is_file()
+                    and file_path.suffix.lower() in AppConfig.IMG_EXTS
+                ):
+                    if self._add_file_item(str(file_path)):
+                        cnt += 1
 
             self.log_view.append_log(f"📂 폴더에서 {cnt}개 파일 추가됨.")
             self.update_log_count()

@@ -1,9 +1,7 @@
 import sys
-import os
+from pathlib import Path
 import pytesseract
 import cv2
-import numpy as np
-import fitz
 
 
 class OCREngine:
@@ -26,10 +24,12 @@ class OCREngine:
 
     def _get_tesseract_path(self):
         if getattr(sys, "frozen", False):
-            base_path = sys._MEIPASS
+            base_path = Path(sys._MEIPASS)
         else:
-            base_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        return os.path.join(base_path, "tesseract_bin", "tesseract.exe")
+            base_path = Path(__file__).resolve().parent.parent
+
+        exe_path = base_path / "tesseract_bin" / "tesseract.exe"
+        return str(exe_path)
 
     def _preprocess_roi_for_ocr(self, roi_img):
         if len(roi_img.shape) == 3:
@@ -41,10 +41,9 @@ class OCREngine:
         scale_percent = 300
         width = int(gray.shape[1] * scale_percent / 100)
         height = int(gray.shape[0] * scale_percent / 100)
-        dim = (width, height)
 
         # 보간
-        resized = cv2.resize(gray, dim, interpolation=cv2.INTER_CUBIC)
+        resized = cv2.resize(gray, (width, height), interpolation=cv2.INTER_CUBIC)
 
         # 이진화
         binary = cv2.adaptiveThreshold(
@@ -60,6 +59,7 @@ class OCREngine:
         kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (2, 2))
         opening = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
         closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
+
         return closing
 
     def extract_text_from_roi(self, image, x, y, w, h):

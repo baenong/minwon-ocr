@@ -1,4 +1,5 @@
-import os
+from pathlib import Path
+from typing import Optional, Union
 import cv2
 import numpy as np
 import fitz
@@ -6,17 +7,20 @@ import fitz
 
 class ImageLoader:
     @staticmethod
-    def load_image(file_path):
-        if not os.path.exists(file_path):
+    def load_image(file_path: Union[str, Path]) -> Optional[np.ndarray]:
+        path_obj = Path(file_path)
+
+        if not path_obj.exists():
+            print(f"[ERROR] 파일이 존재하지 않습니다: {path_obj}")
             return None
 
-        ext = os.path.splitext(file_path)[1].lower()
+        ext = path_obj.suffix.lower()
 
         if ext == ".pdf":
-            return ImageLoader._pdf_to_image(file_path)
+            return ImageLoader._pdf_to_image(path_obj)
 
         try:
-            img_array = np.fromfile(file_path, np.uint8)
+            img_array = np.fromfile(str(path_obj), np.uint8)
             img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
             return img
 
@@ -25,7 +29,7 @@ class ImageLoader:
             return None
 
     @staticmethod
-    def _pdf_to_image(pdf_path):
+    def _pdf_to_image(pdf_path: Path) -> Optional[np.ndarray]:
         doc = fitz.open(pdf_path)
 
         try:
@@ -45,6 +49,7 @@ class ImageLoader:
                     img_cv = cv2.cvtColor(img_data, cv2.COLOR_GRAY2BGR)
 
                 return img_cv
+
         except Exception as e:
             print(f"PDF 변환 오류: {e}")
             return None

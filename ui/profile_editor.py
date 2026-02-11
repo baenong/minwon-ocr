@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import copy
 from PySide6.QtWidgets import (
     QWidget,
@@ -411,7 +412,7 @@ class ProfileEditor(QWidget):
 
         # 샘플 불러오기
         saved_img_path = data.get("sample_image_path", "")
-        if saved_img_path and os.path.exists(saved_img_path):
+        if saved_img_path and Path(saved_img_path).exists():
             self._load_image_from_path(saved_img_path)
         else:
             self.current_image = None
@@ -429,17 +430,18 @@ class ProfileEditor(QWidget):
         )
 
     def _load_image_from_path(self, file_path):
-        if not os.path.exists(file_path):
+        path_obj = Path(file_path)
+        if not path_obj.exists():
             return False
 
         try:
-            self.current_image = ImageLoader.load_image(file_path)
+            self.current_image = ImageLoader.load_image(path_obj)
 
             if self.current_image is None:
                 raise Exception("이미지 데이터를 읽을 수 없습니다.")
 
             self.current_image_path = file_path
-            self.lbl_img_name.setText(os.path.basename(file_path))
+            self.lbl_img_name.setText(path_obj.name)
             self.editor.set_image(self.current_image, reset_view=True)
 
             # 이미지가 바뀌었으니 ROI 박스도 다시 그려야 함
@@ -453,7 +455,7 @@ class ProfileEditor(QWidget):
 
     def load_image_file(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "이미지 열기", "", "Images (*.png *.jpg *.jpeg *.pdf)"
+            self, "이미지 열기", "", AppConfig.FILTER_IMAGE
         )
         if file_path:
             self._load_image_from_path(file_path)
@@ -630,11 +632,6 @@ class ProfileEditor(QWidget):
     def on_roi_selection_changed(self, current_row):
         if current_row >= 0:
             self.editor.highlight_roi_by_index(current_row)
-
-    def on_roi_clicked(self, item):
-        row = self.roi_list_widget.row(item)
-        if row >= 0:
-            self.roi_name_edit.setText(self.rois[row]["col_name"])
 
     def _on_roi_item_clicked(self, item):
         self.roi_list_widget.setCurrentItem(item)

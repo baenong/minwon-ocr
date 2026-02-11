@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 import pandas as pd
 from datetime import datetime
 from PySide6.QtWidgets import (
@@ -182,7 +182,8 @@ class VerificationViewer(QWidget):
                     "이 엑셀 파일에는 이미지 경로 정보(full_path)가 없습니다.\n이미지 뷰어가 작동하지 않을 수 있습니다.",
                 )
 
-            filename = os.path.basename(file_path)
+            path_obj = Path(file_path)
+            filename = path_obj.name
             profile_name = filename.split("_", 1)[1] if "_" in filename else filename
             profile_name = profile_name.replace(".xlsx", "")
 
@@ -205,7 +206,7 @@ class VerificationViewer(QWidget):
 
     def _process_dateframe_columns(self, df, profile_name):
         if "full_path" in df.columns:
-            df["파일명"] = df["full_path"].apply(lambda x: os.path.basename(str(x)))
+            df["파일명"] = df["full_path"].apply(lambda x: Path(str(x)).name)
         else:
             df["파일명"] = "-"
 
@@ -257,8 +258,9 @@ class VerificationViewer(QWidget):
                 return
 
             full_path = path_item.text()
+            path_obj = Path(full_path)
 
-            if not os.path.exists(full_path):
+            if not path_obj.exists():
                 self._show_image_error("이미지 파일이 없습니다.")
                 return
 
@@ -335,9 +337,10 @@ class VerificationViewer(QWidget):
                 new_data.append(row_vals)
 
             try:
-                pd.DataFrame(new_data).to_excel(save_path, index=False)
+                path_obj = Path(save_path)
+                pd.DataFrame(new_data).to_excel(path_obj, index=False)
                 QMessageBox.information(
-                    self, "성공", f"저장되었습니다:\n{os.path.basename(save_path)}"
+                    self, "성공", f"저장되었습니다:\n{path_obj.name}"
                 )
             except Exception as e:
                 QMessageBox.critical(self, "실패", str(e))
