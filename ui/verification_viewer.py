@@ -107,6 +107,9 @@ class VerificationViewer(QWidget):
             return
 
         self.table.clear()
+        self.table.setRowCount(0)
+        self.table.setColumnCount(0)
+
         rows, cols = self.current_df.shape
         self.table.setRowCount(rows)
         self.table.setColumnCount(cols)
@@ -196,6 +199,10 @@ class VerificationViewer(QWidget):
             self.combo_sheet.blockSignals(False)
 
             self.current_df = df
+            self.current_df = self._process_dateframe_columns(
+                self.current_df, profile_name
+            )
+
             self.image_viewer.scene.clear()
             self._update_table_view()
 

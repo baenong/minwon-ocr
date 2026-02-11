@@ -96,6 +96,7 @@ class ProfileEditor(QWidget):
         self.undo_stack = []
         self.is_modified = False
         self.last_selected_item = None
+        self.loaded_profile_name = None
 
         self.init_ui()
         self.load_profile_list()
@@ -366,6 +367,8 @@ class ProfileEditor(QWidget):
                 self.profile_list_widget.setCurrentItem(item)
                 break
 
+        self.loaded_profile_name = name
+
         if should_clear:
             self.clear_editor()
             self.log_view.setText(f"새 서식 생성됨: '{name}' (빈 서식)")
@@ -376,7 +379,9 @@ class ProfileEditor(QWidget):
 
     def load_profile_list(self):
         self.profile_list_widget.clear()
+        self.last_selected_item = None
         names = self.profile_manager.get_all_profile_names()
+
         for name in names:
             item = QListWidgetItem(self.profile_list_widget)
             item.setSizeHint(QSize(0, 32))
@@ -390,12 +395,19 @@ class ProfileEditor(QWidget):
             self.profile_list_widget.setItemWidget(item, widget)
 
     def load_selected_profile(self, item):
-        if self.last_selected_item == item:
-            return
+
+        try:
+            if self.last_selected_item == item:
+                return
+        except RuntimeError:
+            self.last_selected_item = None
 
         if self.check_unsaved_changes():
             self.profile_list_widget.blockSignals(True)
-            self.profile_list_widget.setCurrentItem(self.last_selected_item)
+            if self.last_selected_item:
+                self.profile_list_widget.setCurrentItem(self.last_selected_item)
+            else:
+                self.profile_list_widget.clearSelection()
             self.profile_list_widget.blockSignals(False)
             return
 
@@ -407,6 +419,7 @@ class ProfileEditor(QWidget):
             return
 
         self.rois = copy.deepcopy(data.get("rois", []))
+        self.loaded_profile_name = name
         self.undo_stack.clear()
         self.is_modified = False
 
@@ -463,9 +476,13 @@ class ProfileEditor(QWidget):
     # Update
 
     def save_current_profile(self):
-        item = self.profile_list_widget.currentItem()
+        target_name = self.loaded_profile_name
 
-        if not item:
+        if not target_name:
+            item = self.profile_list_widget.currentItem()
+            if item:
+                target_name = item.data(Qt.UserRole)
+
             if self.rois:
                 answer = QMessageBox.question(
                     self,
@@ -479,10 +496,10 @@ class ProfileEditor(QWidget):
                 QMessageBox.warning(self, "경고", "저장할 서식을 선택하세요.")
                 return
 
-        name = item.data(Qt.UserRole)
+        name = target_name
         data = self.profile_manager.get_profile(name)
-        keywords = data.get("keywords", [])
 
+        keywords = data.get("keywords", [])
         ref_w, ref_h = 0, 0
 
         if self.current_image is not None:
@@ -505,6 +522,8 @@ class ProfileEditor(QWidget):
         else:
             QMessageBox.critical(self, "실패", "저장 실패")
 
+        self.loaded_profile_name = name
+
     def update_roi_name_by_index(self, index, new_name):
         if 0 <= index < len(self.rois):
             if self.rois[index]["col_name"] != new_name:
@@ -517,7 +536,6 @@ class ProfileEditor(QWidget):
     # Delete
 
     def delete_profile_by_name(self, name):
-        """리스트 옆 X버튼 클릭 시 호출"""
         if (
             QMessageBox.question(
                 self, "삭제", f"'{name}' 서식을 정말 삭제하시겠습니까?"
@@ -525,6 +543,11 @@ class ProfileEditor(QWidget):
             == QMessageBox.Yes
         ):
             self.profile_manager.delete_profile(name)
+
+            if self.loaded_profile_name == name:
+                self.loaded_profile_name = None
+                self.last_selected_item = None
+
             self.load_profile_list()
             self.clear_editor()
 
