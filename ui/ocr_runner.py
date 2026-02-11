@@ -40,7 +40,7 @@ class OCRRunner(QWidget):
 
         splitter = QSplitter(Qt.Horizontal)
 
-        # [좌측 패널] 서식 매칭 설정 + 작업 대상 선택
+        # [좌측 패널] OCR 대상 파일 추가
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
@@ -48,7 +48,7 @@ class OCRRunner(QWidget):
         left_layout.addWidget(self._create_profile_group())
         left_layout.addWidget(self._create_input_group())
 
-        # [우측 패널] 실행/중지 + 처리 로그
+        # [우측 패널] 버튼, 로그
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
