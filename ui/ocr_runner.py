@@ -16,16 +16,15 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QShortcut, QKeySequence
+
 from core.batch_processor import BatchProcessor
 from core.profile_manager import ProfileManager
+from core.constants import AppConfig
 from ui.components import ActionButton, LogView, SmoothProgressBar
 
 
 class OCRRunner(QWidget):
     ocr_finished_with_data = Signal(dict)
-
-    SUPPORTED_EXTENSIONS = (".png", ".jpg", "jpeg", ".pdf")
-    FILE_FILTER = "Images (*.png *.jpg *.jpeg *.pdf)"
 
     def __init__(self):
         super().__init__()
@@ -187,7 +186,7 @@ class OCRRunner(QWidget):
 
     def add_files(self):
         files, _ = QFileDialog.getOpenFileNames(
-            self, "파일 선택", "", "Images (*.png *.jpg *.jpeg *.pdf)"
+            self, "파일 선택", "", AppConfig.FILTER_IMAGE
         )
         if files:
             count = 0
@@ -203,7 +202,7 @@ class OCRRunner(QWidget):
             cnt = 0
             for root, dirs, files in os.walk(folder):
                 for f in files:
-                    if f.lower().endswith(self.SUPPORTED_EXTENSIONS):
+                    if f.lower().endswith(AppConfig.IMG_EXTS):
                         full_path = os.path.join(root, f)
                         if self._add_file_item(full_path):
                             cnt += 1

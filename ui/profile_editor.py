@@ -16,9 +16,12 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtCore import Qt, QSize, QEvent
-from ui.editor_widget import ROISelector
+
 from core.profile_manager import ProfileManager
 from core.ocr_engine import OCREngine
+from core.constants import AppConfig
+from core.image_loader import ImageLoader
+from ui.editor_widget import ROISelector
 from ui.profile_dialog import KeywordSettingsDialog
 from ui.components import ActionButton, LogView, TitleLabel
 
@@ -242,13 +245,14 @@ class ProfileEditor(QWidget):
 
     # UI Update
 
-    def _get_roi_pixel_rect(self, roi_data, img_w, img_h):
-        return (
-            int(roi_data["x"] * img_w),
-            int(roi_data["y"] * img_h),
-            int(roi_data["w"] * img_w),
-            int(roi_data["h"] * img_h),
-        )
+    def _create_roi_data(self, name, x, y, w, h, img_w, img_h):
+        return {
+            "col_name": name,
+            "x": x / img_w,
+            "y": y / img_h,
+            "w": w / img_w,
+            "h": h / img_h,
+        }
 
     def clear_editor(self):
         if self.rois:
@@ -312,11 +316,12 @@ class ProfileEditor(QWidget):
     def redraw_all_boxes(self):
         if self.current_image is None:
             return
+
         self.editor.set_image(self.current_image, reset_view=False)
         curr_h, curr_w = self.current_image.shape[:2]
 
         for roi in self.rois:
-            px, py, pw, ph = self._get_roi_pixel_rect(roi, curr_w, curr_h)
+            px, py, pw, ph = ROISelector.to_pixel_rect(roi, curr_w, curr_h)
             self.editor.add_roi_rect(px, py, pw, ph)
 
     # Create
@@ -428,15 +433,12 @@ class ProfileEditor(QWidget):
             return False
 
         try:
-            ext = os.path.splitext(file_path)[1].lower()
-            if ext == ".pdf":
-                images = self.ocr_engine.pdf_to_images(file_path)
-                if images:
-                    self.current_image = images[0]
-            else:
-                self.current_image = self.ocr_engine.load_image(file_path)
+            self.current_image = ImageLoader.load_image(file_path)
 
-            self.current_image_path = file_path  # [NEW] 경로 기억
+            if self.current_image is None:
+                raise Exception("이미지 데이터를 읽을 수 없습니다.")
+
+            self.current_image_path = file_path
             self.lbl_img_name.setText(os.path.basename(file_path))
             self.editor.set_image(self.current_image, reset_view=True)
 
@@ -559,7 +561,7 @@ class ProfileEditor(QWidget):
 
         for roi in self.rois:
             # 비율 -> 픽셀
-            px, py, pw, ph = self._get_roi_pixel_rect(roi, curr_w, curr_h)
+            px, py, pw, ph = ROISelector.to_pixel_rect(roi, curr_w, curr_h)
 
             try:
                 text = self.ocr_engine.extract_text_from_roi(
@@ -608,16 +610,10 @@ class ProfileEditor(QWidget):
         curr_h, curr_w = self.current_image.shape[:2]
         new_name = f"Column_{len(self.rois)+1}"
 
-        ratio_data = {
-            "col_name": new_name,
-            "x": x / curr_w,
-            "y": y / curr_h,
-            "w": w / curr_w,
-            "h": h / curr_h,
-        }
-
-        self.rois.append(ratio_data)
+        roi_data = self._create_roi_data(new_name, x, y, w, h, curr_w, curr_h)
+        self.rois.append(roi_data)
         self.refresh_roi_list()
+
         last_row = len(self.rois) - 1
         self.roi_list_widget.setCurrentRow(last_row)
 
@@ -654,7 +650,7 @@ class ProfileEditor(QWidget):
 
         name = item.data(Qt.UserRole)
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "서식 내보내기", f"{name}.json", "JSON Files (*.json)"
+            self, "서식 내보내기", f"{name}.json", AppConfig.FILTER_JSON
         )
 
         if file_path:
@@ -665,7 +661,7 @@ class ProfileEditor(QWidget):
 
     def import_external_profile(self):
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "서식 불러오기", "", "JSON Files (*.json)"
+            self, "서식 불러오기", "", AppConfig.FILTER_JSON
         )
 
         if file_path:
@@ -700,7 +696,7 @@ class ProfileEditor(QWidget):
 
     def backup_profiles(self):
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "전체 서식 백업", "MinwonOCR_Backup.json", "JSON Files (*.json)"
+            self, "전체 서식 백업", "MinwonOCR_Backup.json", AppConfig.FILTER_JSON
         )
         if file_path:
             if self.profile_manager.export_all_profiles(file_path):

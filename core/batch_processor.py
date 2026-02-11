@@ -3,6 +3,7 @@ import time
 from PySide6.QtCore import QThread, Signal
 from core.ocr_engine import OCREngine
 from core.profile_manager import ProfileManager
+from core.image_loader import ImageLoader
 
 
 class BatchProcessor(QThread):
@@ -66,37 +67,31 @@ class BatchProcessor(QThread):
                 profile_data = self.profile_manager.get_profile(target_profile_name)
                 rois = profile_data["rois"]
 
-                images = []
-                if filename.lower().endswith(".pdf"):
-                    images = self.ocr_engine.pdf_to_images(file_path)
-                else:
-                    image = self.ocr_engine.load_image(file_path)
-                    images = [image]
+                img = ImageLoader.load_image(file_path)
 
-                for img in images:
-                    # 현재 이미지 크기
-                    curr_h, curr_w = img.shape[:2]
-                    row_data = {
-                        "파일명": filename,
-                        "full_path": file_path,
-                    }
+                # 현재 이미지 크기
+                curr_h, curr_w = img.shape[:2]
+                row_data = {
+                    "파일명": filename,
+                    "full_path": file_path,
+                }
 
-                    for roi in rois:
-                        # 좌표 보정
-                        final_x = int(roi["x"] * curr_w)
-                        final_y = int(roi["y"] * curr_h)
-                        final_w = int(roi["w"] * curr_w)
-                        final_h = int(roi["h"] * curr_h)
+                for roi in rois:
+                    # 좌표 보정
+                    final_x = int(roi["x"] * curr_w)
+                    final_y = int(roi["y"] * curr_h)
+                    final_w = int(roi["w"] * curr_w)
+                    final_h = int(roi["h"] * curr_h)
 
-                        col_name = roi["col_name"]
-                        text = self.ocr_engine.extract_text_from_roi(
-                            img, final_x, final_y, final_w, final_h
-                        )
-                        row_data[col_name] = text
+                    col_name = roi["col_name"]
+                    text = self.ocr_engine.extract_text_from_roi(
+                        img, final_x, final_y, final_w, final_h
+                    )
+                    row_data[col_name] = text
 
-                    if target_profile_name not in self.results:
-                        self.results[target_profile_name] = []
-                    self.results[target_profile_name].append(row_data)
+                if target_profile_name not in self.results:
+                    self.results[target_profile_name] = []
+                self.results[target_profile_name].append(row_data)
 
             except Exception as e:
                 self.log_signal.emit(f"[ERROR] {filename}: {e}")

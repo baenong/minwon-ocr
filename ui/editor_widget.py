@@ -59,6 +59,15 @@ class ROISelector(QGraphicsView):
         color.setAlpha(cfg["highlight_alpha"])
         self.highlight_brush.setColor(color)
 
+    @staticmethod
+    def to_pixel_rect(roi_data, img_w, img_h):
+        return (
+            int(roi_data["x"] * img_w),
+            int(roi_data["y"] * img_h),
+            int(roi_data["w"] * img_w),
+            int(roi_data["h"] * img_h),
+        )
+
     def set_image(self, cv_image, reset_view=True):
         self.scene.clear()
         self.current_rect_item = None

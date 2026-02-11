@@ -62,69 +62,6 @@ class OCREngine:
         closing = cv2.morphologyEx(opening, cv2.MORPH_CLOSE, kernel)
         return closing
 
-    def load_image(self, image_path):
-        img_array = np.fromfile(image_path, np.uint8)
-        image = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-
-        if image is None:
-            raise FileNotFoundError(f"이미지를 불러올 수 없습니다: {image_path}")
-
-        # binary = self._apply_processing(image)
-        return image
-        # return image, binary
-
-    def pdf_to_images(self, pdf_path):
-        doc = fitz.open(pdf_path)
-        processed_images = []
-
-        for page_num in range(len(doc)):
-            page = doc.load_page(page_num)
-            pix = page.get_pixmap(dpi=300)  # 고화질 변환
-
-            # PyMuPDF 이미지를 OpenCV 포맷으로 변환
-            img_data = np.frombuffer(pix.samples, dtype=np.uint8)
-
-            # RGB to BGR (OpenCV는 BGR 사용)
-            if pix.n >= 3:
-                img_data = img_data.reshape(pix.h, pix.w, pix.n)
-                img_cv = cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
-            else:
-                img_data = img_data.reshape(pix.h, pix.w)
-                img_cv = cv2.cvtColor(img_data, cv2.COLOR_GRAY2BGR)
-
-            # binary = self._apply_processing(img_cv)
-            processed_images.append(img_cv)
-
-        return processed_images
-
-    def get_display_image(self, file_path):
-        ext = os.path.splitext(file_path)[1].lower()
-
-        if ext == ".pdf":
-            try:
-                doc = fitz.open(file_path)
-                if len(doc) > 0:
-                    page = doc.load_page(0)
-                    pix = page.get_pixmap(dpi=200)
-                    img_data = np.frombuffer(pix.samples, dtype=np.uint8)
-
-                    if pix.n >= 3:
-                        img_data = img_data.reshape(pix.h, pix.w, pix.n)
-                        return cv2.cvtColor(img_data, cv2.COLOR_RGB2BGR)
-                    else:
-                        img_data = img_data.reshape(pix.h, pix.w)
-                        return cv2.cvtColor(img_data, cv2.COLOR_GRAY2BGR)
-            except Exception as e:
-                print(f"PDF Display Error: {e}")
-                return None
-
-        else:
-            try:
-                img_array = np.fromfile(file_path, np.uint8)
-                return cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-            except Exception:
-                return None
-
     def extract_text_from_roi(self, image, x, y, w, h):
         h_img, w_img = image.shape[:2]
         x = max(0, min(x, w_img - 1))
