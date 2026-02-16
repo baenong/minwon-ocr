@@ -586,15 +586,6 @@ class ProfileEditor(QWidget):
 
         self.loaded_profile_name = name
 
-    def update_roi_name_by_index(self, index, new_name):
-        if 0 <= index < len(self.rois):
-            if self.rois[index]["col_name"] != new_name:
-                self.save_state_for_undo()
-                self.rois[index]["col_name"] = new_name
-                item = self.roi_list_widget.item(index)
-                if item:
-                    item.setData(Qt.UserRole, new_name)
-
     def update_roi_data(self, index, new_name, new_dtype):
         if 0 <= index < len(self.rois):
             # 변경 사항이 있을 때만 실행

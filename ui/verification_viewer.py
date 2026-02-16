@@ -22,6 +22,7 @@ from core.profile_manager import ProfileManager
 from core.ocr_engine import OCREngine
 from core.constants import AppConfig
 from core.image_loader import ImageLoader
+from core.image_aligner import ImageAligner
 from ui.editor_widget import ROISelector
 from ui.components import ActionButton
 
@@ -287,9 +288,6 @@ class VerificationViewer(QWidget):
                     template_img = ImageLoader.load_image(template_path)
 
                     if template_img is not None:
-                        # ImageAligner를 사용하여 보정 실행
-                        from core.image_aligner import ImageAligner
-
                         aligned_img, h_matrix = ImageAligner.align_images(
                             img, template_img
                         )
