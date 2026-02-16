@@ -9,6 +9,7 @@ class RoiData(TypedDict):
     y: float
     w: float
     h: float
+    dtype: str
 
 
 class ProfileData(TypedDict):
@@ -17,6 +18,7 @@ class ProfileData(TypedDict):
     ref_w: int
     ref_h: int
     sample_image_path: str
+    template_path: str
 
 
 class ProfileManager:
@@ -60,6 +62,7 @@ class ProfileManager:
         ref_w=0,
         ref_h=0,
         image_path: str = "",
+        template_path: str = "",
     ) -> bool:
         rois_ratio: List[RoiData] = []
 
@@ -91,6 +94,7 @@ class ProfileManager:
             "ref_w": ref_w,
             "ref_h": ref_h,
             "sample_image_path": image_path,
+            "template_path": template_path,
         }
         return self.save_profiles()
 

@@ -6,6 +6,7 @@ from PySide6.QtCore import QThread, Signal
 from core.ocr_engine import OCREngine
 from core.profile_manager import ProfileManager
 from core.image_loader import ImageLoader
+from core.image_aligner import ImageAligner
 
 
 class BatchProcessor(QThread):
@@ -52,7 +53,8 @@ class BatchProcessor(QThread):
             self.log_signal.emit(f"[처리 중] {filename} -> {target_profile_name}")
 
             # 프로파일 데이터 로드
-            row_data = self._process_single_file(file_path, target_profile_name)
+            profile_data = self.profile_manager.get_profile(target_profile_name)
+            row_data = self._process_single_file(file_path, profile_data)
 
             if row_data:
                 if target_profile_name not in self.results:
@@ -65,13 +67,17 @@ class BatchProcessor(QThread):
             # 너무 빠른 루프 방지 및 UI 반응성 확보
             time.sleep(0.05)
 
-        if self.is_running:
+        if self.results:
             self.results_ready_signal.emit(self.results)
+
+        if self.is_running:
             self.finished_signal.emit(
                 "OCR 추출이 완료되었습니다. 검증 화면으로 이동합니다."
             )
         else:
-            self.finished_signal.emit("작업이 사용자에 의해 중단되었습니다.")
+            self.finished_signal.emit(
+                f"작업이 사용자에 의해 중단되었습니다.(처리됨: {processed_count}/{total_files})"
+            )
 
     def stop(self):
         self.is_running = False
@@ -90,11 +96,10 @@ class BatchProcessor(QThread):
         return None
 
     def _process_single_file(
-        self, file_path: Path, profile_name: str
+        self, file_path: Path, profile_data: Dict
     ) -> Optional[Dict[str, Any]]:
         try:
             # 프로파일 데이터 로드
-            profile_data = self.profile_manager.get_profile(profile_name)
             if not profile_data:
                 return None
 
@@ -105,6 +110,19 @@ class BatchProcessor(QThread):
             if img is None:
                 self.log_signal.emit(f"[ERROR] 이미지 로드 실패: {file_path.name}")
                 return None
+
+            # 템플릿 로드
+            template_path = profile_data.get("template_path", "")
+            if template_path and Path(template_path).exists():
+                template_img = ImageLoader.load_image(template_path)
+
+                if template_img is not None:
+                    aligned_image, h_matrix = ImageAligner.align_images(
+                        img, template_img
+                    )
+
+                    if h_matrix is not None:
+                        img = aligned_image
 
             curr_h, curr_w = img.shape[:2]
 
@@ -125,10 +143,11 @@ class BatchProcessor(QThread):
                 final_h = int(roi["h"] * curr_h)
 
                 col_name = roi["col_name"]
+                dtype = roi.get("dtype", "전체")
 
                 # OCR 엔진 호출
                 text = self.ocr_engine.extract_text_from_roi(
-                    img, final_x, final_y, final_w, final_h
+                    img, final_x, final_y, final_w, final_h, dtype=dtype
                 )
                 row_data[col_name] = text
 

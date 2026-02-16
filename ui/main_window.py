@@ -136,7 +136,7 @@ class IconFactory:
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("서류 OCR 변환 프로그램")
+        self.setWindowTitle("G-OCR")
         self.resize(1280, 800)
 
         self._init_central_widget()

@@ -274,9 +274,34 @@ class VerificationViewer(QWidget):
             # 이미지 로드 및 표시
             img = ImageLoader.load_image(full_path)
 
-            if img is not None:
-                self.image_viewer.set_image(img, reset_view=True)
-                self._draw_roi_boxes(img, col, headers)
+            if img is None:
+                return
+
+            current_profile_name = self.combo_sheet.currentText()
+            profile_data = self.profile_manager.get_profile(current_profile_name)
+
+            if profile_data:
+                template_path = profile_data.get("template_path", "")
+                if template_path and Path(template_path).exists():
+                    # 템플릿 이미지 로드 (보정 없이 순수하게)
+                    template_img = ImageLoader.load_image(template_path)
+
+                    if template_img is not None:
+                        # ImageAligner를 사용하여 보정 실행
+                        from core.image_aligner import ImageAligner
+
+                        aligned_img, h_matrix = ImageAligner.align_images(
+                            img, template_img
+                        )
+
+                        if h_matrix is not None:
+                            img = aligned_img
+
+            self.image_viewer.set_image(img, reset_view=True)
+            self.image_viewer.fitInView(
+                self.image_viewer.scene.itemsBoundingRect(), Qt.KeepAspectRatio
+            )
+            self._draw_roi_boxes(img, col, headers)
 
         except Exception as e:
             print(f"이미지 로드 에러: {e}")

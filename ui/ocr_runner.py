@@ -189,11 +189,12 @@ class OCRRunner(QWidget):
             self, "파일 선택", "", AppConfig.FILTER_IMAGE
         )
         if files:
-            count = 0
+            cnt = 0
             for f in files:
                 if self._add_file_item(f):
-                    count += 1
-            if count > 0:
+                    cnt += 1
+            if cnt > 0:
+                self.log_view.append_log(f"📂 {cnt}개 파일 추가됨.")
                 self.update_log_count()
 
     def add_folder(self):

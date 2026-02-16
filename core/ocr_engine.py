@@ -44,6 +44,8 @@ class OCREngine:
 
         # 보간
         resized = cv2.resize(gray, (width, height), interpolation=cv2.INTER_CUBIC)
+        # _, binary = cv2.threshold(resized, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # return binary
 
         # 이진화
         binary = cv2.adaptiveThreshold(
@@ -62,7 +64,32 @@ class OCREngine:
 
         return closing
 
-    def extract_text_from_roi(self, image, x, y, w, h):
+    def extract_text_from_roi(self, image, x, y, w, h, dtype="전체"):
+
+        numbers = "0123456789"
+        symbols = r"!@#$%^&*()-_=+[{]};:'\",<.>/? "
+
+        if dtype == "숫자":
+            # 숫자 + 기본 기호 (7을 /로 오해하는 것을 방지)
+            whitelist = numbers + ".,/@- "
+            config = f"--oem 3 --psm 7 -c tessedit_char_whitelist={whitelist} -l eng"
+
+        elif dtype == "영어+숫자":
+            english = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            whitelist = english + numbers + symbols
+            config = f"--oem 3 --psm 7 -c tessedit_char_whitelist={whitelist} -l eng"
+
+        elif dtype == "한글":
+            config = "--oem 3 --psm 7 -l kor"  # 한글은 화이트리스트 관리가 어려우니 언어팩 최적화
+
+        elif dtype == "영어":
+            english = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            whitelist = english + symbols
+            config = f"--oem 3 --psm 7 -c tessedit_char_whitelist={whitelist} -l eng"
+
+        else:
+            config = "--oem 3 --psm 7 -l kor+eng"
+
         h_img, w_img = image.shape[:2]
         x = max(0, min(x, w_img - 1))
         y = max(0, min(y, h_img - 1))
@@ -71,7 +98,7 @@ class OCREngine:
 
         roi = image[y : y + h, x : x + w]
         processed_roi = self._preprocess_roi_for_ocr(roi)
-        custom_config = r"--oem 3 --psm 7 -l kor+eng"
+        # custom_config = r"--oem 3 --psm 7 -l kor+eng"
 
-        text = pytesseract.image_to_string(processed_roi, config=custom_config)
+        text = pytesseract.image_to_string(processed_roi, config=config)
         return text.strip().replace(" ", "")

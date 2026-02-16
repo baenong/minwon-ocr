@@ -14,14 +14,16 @@ class ImageLoader:
             print(f"[ERROR] 파일이 존재하지 않습니다: {path_obj}")
             return None
 
+        img = None
         ext = path_obj.suffix.lower()
 
-        if ext == ".pdf":
-            return ImageLoader._pdf_to_image(path_obj)
-
         try:
-            img_array = np.fromfile(str(path_obj), np.uint8)
-            img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+            if ext == ".pdf":
+                img = ImageLoader._pdf_to_image(path_obj)
+            else:
+                img_array = np.fromfile(str(path_obj), np.uint8)
+                img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
             return img
 
         except Exception as e:

@@ -74,7 +74,7 @@ def main():
     icon_path = resource_path("resources/imgs/brightness-stand.ico")
     app.setWindowIcon(QIcon(icon_path))
 
-    splash_path = resource_path("resources/imgs/brightness-stand.png")
+    splash_path = resource_path("resources/imgs/G-OCR-logo.png")
     splash_pix = QPixmap(splash_path)
 
     if splash_pix.isNull():

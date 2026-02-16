@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import copy
 from PySide6.QtWidgets import (
@@ -7,6 +6,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
     QPushButton,
+    QComboBox,
     QLabel,
     QLineEdit,
     QSplitter,
@@ -22,6 +22,7 @@ from core.profile_manager import ProfileManager
 from core.ocr_engine import OCREngine
 from core.constants import AppConfig
 from core.image_loader import ImageLoader
+from core.image_aligner import ImageAligner
 from ui.editor_widget import ROISelector
 from ui.profile_dialog import KeywordSettingsDialog
 from ui.components import ActionButton, LogView, TitleLabel
@@ -48,7 +49,14 @@ class ProfileItemWidget(QWidget):
 
 # [2] ROI 목록용 (입력창 + 삭제 버튼 + 이벤트 필터)
 class ROIItemWidget(QWidget):
-    def __init__(self, text, change_callback, delete_callback, select_callback=None):
+    def __init__(
+        self,
+        text,
+        change_callback,
+        delete_callback,
+        select_callback=None,
+        dtype="전체",
+    ):
         super().__init__()
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -64,10 +72,22 @@ class ROIItemWidget(QWidget):
         # 클릭 시 선택 처리를 위한 이벤트 필터
         self.name_edit.installEventFilter(self)
         self.name_edit.editingFinished.connect(
-            lambda: change_callback(self.name_edit.text())
+            lambda: change_callback(
+                self.name_edit.text(), self.type_combo.currentText()
+            )
         )
 
-        layout.addWidget(self.name_edit)
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(["전체", "한글", "영어", "숫자", "영어+숫자"])
+        self.type_combo.setCurrentText(dtype)
+        self.type_combo.currentTextChanged.connect(
+            lambda: change_callback(
+                self.name_edit.text(), self.type_combo.currentText()
+            )
+        )
+
+        layout.addWidget(self.name_edit, 3)
+        layout.addWidget(self.type_combo, 2)
 
         self.btn_delete = QPushButton("❌")
         self.btn_delete.setFixedSize(28, 24)
@@ -91,6 +111,7 @@ class ProfileEditor(QWidget):
 
         self.current_image = None
         self.current_image_path = None
+        self.current_template_path = ""
 
         self.rois = []
         self.undo_stack = []
@@ -124,7 +145,11 @@ class ProfileEditor(QWidget):
 
         # 버튼 스타일 통일
         self.btn_keyword = ActionButton(
-            text=" 키워드 설정", callback=self.open_keyword_dialog
+            text="키워드 설정", callback=self.open_keyword_dialog
+        )
+
+        self.btn_set_template = ActionButton(
+            text="템플릿 등록", callback=self.set_template
         )
 
         self.btn_backup = ActionButton("백업", self.backup_profiles)
@@ -145,6 +170,7 @@ class ProfileEditor(QWidget):
         self.lbl_guide.setStyleSheet("margin-top: 5px; color: #ff7f00;")
 
         top_bar.addWidget(self.btn_keyword)
+        top_bar.addWidget(self.btn_set_template)
         top_bar.addWidget(self.btn_backup)
         top_bar.addWidget(self.btn_export)
         top_bar.addWidget(self.btn_import)
@@ -302,14 +328,17 @@ class ProfileEditor(QWidget):
 
         for idx, roi in enumerate(self.rois):
             item = QListWidgetItem(self.roi_list_widget)
-            item.setSizeHint(QSize(0, 32))
+            item.setSizeHint(QSize(0, 36))
             item.setData(Qt.UserRole, roi["col_name"])
+
+            current_dtype = roi.get("dtype", "전체")
 
             widget = ROIItemWidget(
                 roi["col_name"],
-                lambda text, i=idx: self.update_roi_name_by_index(i, text),
+                lambda name, dtype, i=idx: self.update_roi_data(i, name, dtype),
                 lambda i=idx: self.delete_roi_by_index(i),
                 select_callback=lambda it=item: self._on_roi_item_clicked(it),
+                dtype=current_dtype,
             )
             self.roi_list_widget.setItemWidget(item, widget)
 
@@ -376,6 +405,16 @@ class ProfileEditor(QWidget):
             self.log_view.setText(f"새 서식 생성됨: '{name}' (현재 내용 저장됨)")
 
     # Read
+    def set_template(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "템플릿 선택", "", AppConfig.FILTER_IMAGE
+        )
+        if file_path:
+            self.current_template_path = file_path
+            QMessageBox.information(
+                self, "알림", f"원본 서식이 지정되었습니다.\n{Path(file_path).name}"
+            )
+            self.mark_as_modified()
 
     def load_profile_list(self):
         self.profile_list_widget.clear()
@@ -404,10 +443,12 @@ class ProfileEditor(QWidget):
 
         if self.check_unsaved_changes():
             self.profile_list_widget.blockSignals(True)
+
             if self.last_selected_item:
                 self.profile_list_widget.setCurrentItem(self.last_selected_item)
             else:
                 self.profile_list_widget.clearSelection()
+
             self.profile_list_widget.blockSignals(False)
             return
 
@@ -420,6 +461,7 @@ class ProfileEditor(QWidget):
 
         self.rois = copy.deepcopy(data.get("rois", []))
         self.loaded_profile_name = name
+        self.current_template_path = data.get("template_path", "")
         self.undo_stack.clear()
         self.is_modified = False
 
@@ -448,11 +490,25 @@ class ProfileEditor(QWidget):
             return False
 
         try:
-            self.current_image = ImageLoader.load_image(path_obj)
-
-            if self.current_image is None:
+            loaded_image = ImageLoader.load_image(path_obj)
+            if loaded_image is None:
                 raise Exception("이미지 데이터를 읽을 수 없습니다.")
 
+            if self.current_template_path and Path(self.current_template_path).exists():
+                template_img = ImageLoader.load_image(self.current_template_path)
+
+                if template_img is not None:
+                    aligned_image, h_matrix = ImageAligner.align_images(
+                        loaded_image, template_img
+                    )
+
+                    if h_matrix is not None:
+                        loaded_image = aligned_image
+                        self.log_view.append_log(
+                            "✨ 샘플 이미지가 템플릿 서식에 맞춰 자동 보정되었습니다."
+                        )
+
+            self.current_image = loaded_image
             self.current_image_path = file_path
             self.lbl_img_name.setText(path_obj.name)
             self.editor.set_image(self.current_image, reset_view=True)
@@ -515,7 +571,13 @@ class ProfileEditor(QWidget):
             image_path_to_save = data.get("sample_image_path", "")
 
         if self.profile_manager.add_profile(
-            name, keywords, self.rois, ref_w, ref_h, image_path_to_save
+            name,
+            keywords,
+            self.rois,
+            ref_w,
+            ref_h,
+            image_path_to_save,
+            self.current_template_path,
         ):
             QMessageBox.information(self, "성공", "설정이 저장되었습니다.")
             self.is_modified = False
@@ -532,6 +594,27 @@ class ProfileEditor(QWidget):
                 item = self.roi_list_widget.item(index)
                 if item:
                     item.setData(Qt.UserRole, new_name)
+
+    def update_roi_data(self, index, new_name, new_dtype):
+        if 0 <= index < len(self.rois):
+            # 변경 사항이 있을 때만 실행
+            if (
+                self.rois[index]["col_name"] != new_name
+                or self.rois[index].get("dtype", "전체") != new_dtype
+            ):
+
+                self.save_state_for_undo()  # 실행 취소를 위한 스냅샷 저장
+                self.mark_as_modified()  # 수정됨 표시
+
+                self.rois[index]["col_name"] = new_name
+                self.rois[index]["dtype"] = new_dtype
+
+                # 리스트 위젯의 실제 아이템 데이터도 동기화
+                item = self.roi_list_widget.item(index)
+                if item:
+                    item.setData(Qt.UserRole, new_name)
+
+                self.log_view.append_log(f"📝 ROI 수정: {new_name} ({new_dtype})")
 
     # Delete
 
@@ -636,6 +719,7 @@ class ProfileEditor(QWidget):
         new_name = f"Column_{len(self.rois)+1}"
 
         roi_data = self._create_roi_data(new_name, x, y, w, h, curr_w, curr_h)
+        roi_data["dtype"] = "전체"
         self.rois.append(roi_data)
         self.refresh_roi_list()
 
