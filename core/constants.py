@@ -4,7 +4,7 @@ from typing import Final, Tuple
 
 @dataclass(frozen=True)
 class AppConfig:
-    APP_NAME: Final[str] = "Minwon OCR Automation Tool"
+    APP_NAME: Final[str] = "Gunsan OCR Program"
 
     # ext
     IMG_EXTS: Final[Tuple[str, ...]] = (".png", ".jpg", ".jpeg", ".pdf")
